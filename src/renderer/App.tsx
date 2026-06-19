@@ -3,15 +3,17 @@ import DigitChecker from './components/DigitChecker'
 import DensityChart from './components/DensityChart'
 import SpiralVisualization from './components/SpiralVisualization'
 import SequenceViewer from './components/SequenceViewer'
+import RealNumberOcean from './components/RealNumberOcean'
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'check' | 'density' | 'spiral' | 'sequence'>('check')
+  const [activeTab, setActiveTab] = useState<'check' | 'density' | 'spiral' | 'sequence' | 'ocean'>('ocean')
 
   const tabs = [
     { id: 'check', label: '位数查询', icon: '🔍' },
     { id: 'density', label: '密度分析', icon: '📊' },
     { id: 'spiral', label: '螺旋可视化', icon: '🌀' },
-    { id: 'sequence', label: '序列查看', icon: '🔢' }
+    { id: 'sequence', label: '序列查看', icon: '🔢' },
+    { id: 'ocean', label: '实数海洋', icon: '🌊' }
   ] as const
 
   return (
@@ -98,6 +100,7 @@ function App() {
         {activeTab === 'density' && <DensityChart />}
         {activeTab === 'spiral' && <SpiralVisualization />}
         {activeTab === 'sequence' && <SequenceViewer />}
+        {activeTab === 'ocean' && <RealNumberOcean />}
       </main>
 
       <footer style={{

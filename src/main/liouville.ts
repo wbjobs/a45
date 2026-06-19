@@ -26,6 +26,44 @@ export interface ProgressCallback {
   (progress: number, message: string): void
 }
 
+export type RealNumberType = 'algebraic' | 'transcendental' | 'liouville'
+
+export interface RealNumberInfo {
+  value: number
+  type: RealNumberType
+  typeDescription: string
+  isLiouville: boolean
+  liouvilleDigit?: 0 | 1
+  liouvillePosition?: bigint
+  confidence: number
+  explanation: string
+}
+
+export interface OceanParticle {
+  id: number
+  x: number
+  y: number
+  z: number
+  value: number
+  type: RealNumberType
+}
+
+export interface OceanPointQuery {
+  value: number
+  range: number
+}
+
+export interface OceanQueryResult {
+  centerValue: number
+  range: number
+  liouvilleChecks: Array<{ position: bigint; digit: 0 | 1; isFactorial: boolean }>
+  dominantType: RealNumberType
+  explanation: string
+  transcendentalDensity: number
+  algebraicDensity: number
+  liouvilleCount: number
+}
+
 const LN_2PI = Math.log(2 * Math.PI)
 
 function stirlingLogFactorial(k: number): number {
@@ -400,4 +438,302 @@ export async function generateDigitSequence(
 
   if (onProgress) onProgress(1, '序列生成完成！')
   return result
+}
+
+const TRANSCENDENTAL_PROBABILITY = 0.99999
+const ALGEBRAIC_PROBABILITY = 0.00001
+
+function isAlgebraicCandidate(value: number): boolean {
+  const absVal = Math.abs(value)
+  if (absVal < 1e-10) return true
+
+  const decimalStr = absVal.toString()
+  const dotIndex = decimalStr.indexOf('.')
+  if (dotIndex === -1) return true
+
+  const decimalPart = decimalStr.slice(dotIndex + 1)
+  if (decimalPart.length < 15) return true
+
+  for (let period = 1; period <= 10; period++) {
+    let repeating = true
+    for (let i = 0; i < decimalPart.length - period; i++) {
+      if (decimalPart[i] !== decimalPart[i + period]) {
+        repeating = false
+        break
+      }
+    }
+    if (repeating) return true
+  }
+
+  for (let degree = 1; degree <= 4; degree++) {
+    for (let coeffRange = 1; coeffRange <= 10; coeffRange++) {
+      if (isRootOfPolynomial(value, degree, coeffRange)) {
+        return true
+      }
+    }
+  }
+
+  return false
+}
+
+function isRootOfPolynomial(value: number, degree: number, coeffRange: number): boolean {
+  const tolerance = 1e-8
+  for (let a = -coeffRange; a <= coeffRange; a++) {
+    if (a === 0 && degree === 0) continue
+    for (let b = -coeffRange; b <= coeffRange; b++) {
+      for (let c = -coeffRange; c <= coeffRange; c++) {
+        for (let d = -coeffRange; d <= coeffRange; d++) {
+          let poly = 0
+          if (degree >= 0) poly += d * Math.pow(value, 0)
+          if (degree >= 1) poly += c * Math.pow(value, 1)
+          if (degree >= 2) poly += b * Math.pow(value, 2)
+          if (degree >= 3) poly += a * Math.pow(value, 3)
+          if (Math.abs(poly) < tolerance) {
+            return true
+          }
+        }
+      }
+    }
+  }
+  return false
+}
+
+function classifyRealNumber(value: number): { type: RealNumberType; confidence: number; explanation: string } {
+  const absVal = Math.abs(value)
+  const decimalStr = absVal.toFixed(20)
+
+  if (absVal < 1e-10) {
+    return {
+      type: 'algebraic',
+      confidence: 1.0,
+      explanation: '0 是整系数方程 x = 0 的根，因此是代数数'
+    }
+  }
+
+  const isInteger = Math.abs(absVal - Math.round(absVal)) < 1e-10
+  if (isInteger) {
+    return {
+      type: 'algebraic',
+      confidence: 1.0,
+      explanation: `整数 ${Math.round(absVal)} 是方程 x - ${Math.round(absVal)} = 0 的根，因此是代数数`
+    }
+  }
+
+  const dotIndex = decimalStr.indexOf('.')
+  if (dotIndex !== -1) {
+    const decimalPart = decimalStr.slice(dotIndex + 1)
+    for (let period = 1; period <= 12; period++) {
+      if (decimalPart.length > period * 3) {
+        let repeating = true
+        const pattern = decimalPart.slice(0, period)
+        for (let i = period; i < decimalPart.length - period; i += period) {
+          if (decimalPart.slice(i, i + period) !== pattern) {
+            repeating = false
+            break
+          }
+        }
+        if (repeating) {
+          return {
+            type: 'algebraic',
+            confidence: 0.95,
+            explanation: `0.${pattern}... 是循环小数（周期 ${period}），所有循环小数都是有理数，因此是代数数`
+          }
+        }
+      }
+    }
+  }
+
+  if (isAlgebraicCandidate(value)) {
+    return {
+      type: 'algebraic',
+      confidence: 0.7,
+      explanation: '该数可能是某个低次整系数多项式的根，推测为代数数'
+    }
+  }
+
+  const random = Math.random()
+  if (random < ALGEBRAIC_PROBABILITY * 10) {
+    return {
+      type: 'algebraic',
+      confidence: 0.1,
+      explanation: '从测度论角度，随机选到代数数的概率为0。但由于计算的有限性，这里模拟极小概率事件。'
+    }
+  }
+
+  return {
+    type: 'transcendental',
+    confidence: 0.999,
+    explanation: '从测度论角度，在实数轴上随机选取一点，该点为超越数的概率为1。几乎所有实数都是超越数。'
+  }
+}
+
+export function classifyRealNumberWithLiouville(value: number): RealNumberInfo {
+  const classification = classifyRealNumber(value)
+  const intValue = BigInt(Math.floor(Math.abs(value)))
+
+  let isLiouville = false
+  let liouvilleDigit: 0 | 1 | undefined
+  let liouvillePosition: bigint | undefined
+  let typeDescription: string
+  let explanation = classification.explanation
+
+  if (intValue > 0n) {
+    const factorialIndex = findFactorialIndexSync(intValue)
+    if (factorialIndex !== null) {
+      isLiouville = true
+      liouvilleDigit = 1
+      liouvillePosition = intValue
+      classification.type = 'liouville'
+      classification.confidence = 1.0
+      explanation = `刘维尔数小数点后第 ${intValue} 位是 1（因为 ${intValue} = ${factorialIndex}!）。刘维尔数是第一个被证明的超越数。`
+    }
+  }
+
+  if (isLiouville) {
+    typeDescription = '刘维尔数（特殊超越数）'
+  } else if (classification.type === 'transcendental') {
+    typeDescription = '超越数'
+    explanation += ' 刘维尔数只是不可数多个超越数中的一个特例。'
+  } else {
+    typeDescription = '代数数'
+  }
+
+  return {
+    value,
+    type: classification.type,
+    typeDescription,
+    isLiouville,
+    liouvilleDigit,
+    liouvillePosition,
+    confidence: classification.confidence,
+    explanation
+  }
+}
+
+function findFactorialIndexSync(n: bigint): bigint | null {
+  if (n < 1n) return null
+
+  const estK = estimateFactorialIndex(n)
+  const searchRange = 5
+
+  for (let offset = -searchRange; offset <= searchRange; offset++) {
+    const k = BigInt(Math.max(1, estK + offset))
+    const fact = computeFactorialSync(k)
+    if (fact === n) return k
+    if (fact > n * 1000n) break
+  }
+
+  return null
+}
+
+function computeFactorialSync(k: bigint): bigint {
+  let result = 1n
+  for (let i = 2n; i <= k; i++) {
+    result *= i
+  }
+  return result
+}
+
+export async function generateOceanParticles(
+  count: number,
+  bounds: { minX: number; maxX: number; minY: number; maxY: number },
+  onProgress?: ProgressCallback
+): Promise<OceanParticle[]> {
+  const particles: OceanParticle[] = []
+  const width = bounds.maxX - bounds.minX
+  const height = bounds.maxY - bounds.minY
+
+  if (onProgress) onProgress(0, '开始生成实数海洋粒子...')
+
+  for (let i = 0; i < count; i++) {
+    const x = bounds.minX + Math.random() * width
+    const y = bounds.minY + Math.random() * height
+    const z = (Math.random() - 0.5) * 0.5
+    const value = x
+
+    const classification = classifyRealNumber(value)
+
+    let type: RealNumberType = classification.type
+    const intValue = BigInt(Math.floor(Math.abs(value)))
+    if (intValue > 0n) {
+      const factIndex = findFactorialIndexSync(intValue)
+      if (factIndex !== null) {
+        type = 'liouville'
+      }
+    }
+
+    particles.push({
+      id: i,
+      x,
+      y,
+      z,
+      value,
+      type
+    })
+
+    if (onProgress && i % Math.max(1, Math.floor(count / 50)) === 0) {
+      onProgress(i / count, `已生成 ${i + 1}/${count} 个粒子`)
+      await new Promise(resolve => setImmediate(resolve))
+    }
+  }
+
+  if (onProgress) onProgress(1, '实数海洋粒子生成完成！')
+  return particles
+}
+
+export async function queryOceanPoint(
+  query: OceanPointQuery,
+  onProgress?: ProgressCallback
+): Promise<OceanQueryResult> {
+  const { value, range } = query
+
+  if (onProgress) onProgress(0, '正在分析该区域的实数分布...')
+
+  const liouvilleChecks: Array<{ position: bigint; digit: 0 | 1; isFactorial: boolean }> = []
+
+  const startPos = BigInt(Math.max(1, Math.floor(value - range)))
+  const endPos = BigInt(Math.max(1, Math.floor(value + range)))
+  const totalChecks = Number(endPos - startPos + 1n)
+
+  for (let pos = startPos; pos <= endPos; pos++) {
+    const factIndex = findFactorialIndexSync(pos)
+    const isFactorial = factIndex !== null
+    const digit: 0 | 1 = isFactorial ? 1 : 0
+    liouvilleChecks.push({ position: pos, digit, isFactorial })
+
+    if (onProgress && totalChecks > 10) {
+      const progress = 0.5 + (Number(pos - startPos) / totalChecks) * 0.5
+      if (Number(pos - startPos) % Math.max(1, Math.floor(totalChecks / 20)) === 0) {
+        onProgress(progress, `正在检查第 ${pos} 位...`)
+        await new Promise(resolve => setImmediate(resolve))
+      }
+    }
+  }
+
+  const liouvilleCount = liouvilleChecks.filter(c => c.isFactorial).length
+  const transcendentalDensity = TRANSCENDENTAL_PROBABILITY
+  const algebraicDensity = ALGEBRAIC_PROBABILITY
+
+  let dominantType: RealNumberType = 'transcendental'
+  if (liouvilleCount > 0) {
+    dominantType = 'liouville'
+  }
+
+  const explanation =
+    liouvilleCount > 0
+      ? `该区间内包含 ${liouvilleCount} 个刘维尔数的1数位（阶乘位置）。`
+      : '该区间内没有刘维尔数的1数位。从测度论角度，该区域几乎全部是超越数。'
+
+  if (onProgress) onProgress(1, '区域分析完成！')
+
+  return {
+    centerValue: value,
+    range,
+    liouvilleChecks,
+    dominantType,
+    explanation,
+    transcendentalDensity,
+    algebraicDensity,
+    liouvilleCount
+  }
 }

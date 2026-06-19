@@ -5,10 +5,17 @@ import {
   calculateDensity,
   generateSpiralData,
   generateDigitSequence,
+  classifyRealNumberWithLiouville,
+  generateOceanParticles,
+  queryOceanPoint,
   LiouvilleResult,
   DensityDataPoint,
   SpiralDataPoint,
-  ProgressCallback
+  ProgressCallback,
+  RealNumberInfo,
+  OceanParticle,
+  OceanQueryResult,
+  OceanPointQuery
 } from './liouville'
 
 let mainWindow: BrowserWindow | null = null
@@ -199,6 +206,74 @@ ipcMain.handle(
         done: true
       })
       throw new Error(error.message || '序列生成失败')
+    }
+  }
+)
+
+ipcMain.handle(
+  'classify-real-number',
+  async (event, value: number): Promise<RealNumberInfo> => {
+    try {
+      const result = classifyRealNumberWithLiouville(value)
+      return serializeBigInt(result) as unknown as RealNumberInfo
+    } catch (error: any) {
+      throw new Error(error.message || '实数分类失败')
+    }
+  }
+)
+
+ipcMain.handle(
+  'generate-ocean-particles',
+  async (
+    event,
+    count: number,
+    bounds: { minX: number; maxX: number; minY: number; maxY: number }
+  ): Promise<OceanParticle[]> => {
+    try {
+      const onProgress = createProgressCallback(event, 'generate-ocean-progress')
+      const result = await generateOceanParticles(count, bounds, onProgress)
+      event.sender.send('generate-ocean-progress', {
+        progress: 1,
+        percentage: 100,
+        message: '完成！',
+        done: true
+      })
+      return serializeBigInt(result) as unknown as OceanParticle[]
+    } catch (error: any) {
+      event.sender.send('generate-ocean-progress', {
+        progress: 1,
+        percentage: 100,
+        message: '出错了',
+        error: error.message,
+        done: true
+      })
+      throw new Error(error.message || '粒子生成失败')
+    }
+  }
+)
+
+ipcMain.handle(
+  'query-ocean-point',
+  async (event, query: OceanPointQuery): Promise<OceanQueryResult> => {
+    try {
+      const onProgress = createProgressCallback(event, 'query-ocean-progress')
+      const result = await queryOceanPoint(query, onProgress)
+      event.sender.send('query-ocean-progress', {
+        progress: 1,
+        percentage: 100,
+        message: '完成！',
+        done: true
+      })
+      return serializeBigInt(result) as unknown as OceanQueryResult
+    } catch (error: any) {
+      event.sender.send('query-ocean-progress', {
+        progress: 1,
+        percentage: 100,
+        message: '出错了',
+        error: error.message,
+        done: true
+      })
+      throw new Error(error.message || '区域查询失败')
     }
   }
 )
