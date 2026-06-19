@@ -1,11 +1,23 @@
-import { useState } from 'react'
-import type { LiouvilleResult } from '../types/global'
+import { useState, useEffect } from 'react'
+import type { LiouvilleResult, ProgressInfo } from '../types/global'
+import ProgressBar from './ProgressBar'
 
 function DigitChecker() {
   const [input, setInput] = useState('')
   const [result, setResult] = useState<LiouvilleResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [progress, setProgress] = useState<ProgressInfo | null>(null)
+
+  useEffect(() => {
+    const unsub = window.liouvilleAPI.onCheckDigitProgress((info) => {
+      setProgress(info)
+      if (info.done) {
+        setTimeout(() => setProgress(null), 500)
+      }
+    })
+    return unsub
+  }, [])
 
   const handleCheck = async () => {
     if (!input.trim()) {
@@ -27,6 +39,7 @@ function DigitChecker() {
     setLoading(true)
     setError('')
     setResult(null)
+    setProgress({ progress: 0, percentage: 0, message: '初始化...' })
 
     try {
       const res = await window.liouvilleAPI.checkDigit(numStr)
@@ -64,7 +77,8 @@ function DigitChecker() {
         backdropFilter: 'blur(10px)',
         display: 'flex',
         flexDirection: 'column',
-        gap: '24px'
+        gap: '24px',
+        overflowY: 'auto'
       }}>
         <div>
           <h2 style={{
@@ -84,67 +98,71 @@ function DigitChecker() {
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-          <div style={{ flex: 1 }}>
-            <label style={{
-              display: 'block',
-              fontSize: '13px',
-              color: 'rgba(224, 224, 255, 0.7)',
-              marginBottom: '8px'
-            }}>
-              输入位置 n（正整数）
-            </label>
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value.replace(/[^\d]/g, ''))}
-              onKeyPress={handleKeyPress}
-              placeholder="例如：1, 2, 6, 24, 120, 720..."
+        <div>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+            <div style={{ flex: 1 }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                color: 'rgba(224, 224, 255, 0.7)',
+                marginBottom: '8px'
+              }}>
+                输入位置 n（正整数）
+              </label>
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value.replace(/[^\d]/g, ''))}
+                onKeyPress={handleKeyPress}
+                placeholder="例如：1, 2, 6, 24, 120, 720, 1000000000..."
+                style={{
+                  width: '100%',
+                  padding: '14px 18px',
+                  fontSize: '18px',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '2px solid rgba(100, 150, 255, 0.3)',
+                  borderRadius: '10px',
+                  color: '#e0e0ff',
+                  outline: 'none',
+                  transition: 'all 0.3s ease',
+                  fontFamily: 'Consolas, Monaco, monospace'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = 'rgba(79, 195, 247, 0.8)'
+                  e.target.style.boxShadow = '0 0 20px rgba(79, 195, 247, 0.2)'
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = 'rgba(100, 150, 255, 0.3)'
+                  e.target.style.boxShadow = 'none'
+                }}
+              />
+            </div>
+            <button
+              onClick={handleCheck}
+              disabled={loading}
               style={{
-                width: '100%',
-                padding: '14px 18px',
-                fontSize: '18px',
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '2px solid rgba(100, 150, 255, 0.3)',
+                marginTop: '26px',
+                padding: '14px 32px',
+                fontSize: '16px',
+                fontWeight: 600,
+                background: loading
+                  ? 'rgba(100, 150, 255, 0.3)'
+                  : 'linear-gradient(135deg, #4fc3f7, #ba68c8)',
+                color: '#fff',
+                border: 'none',
                 borderRadius: '10px',
-                color: '#e0e0ff',
-                outline: 'none',
+                cursor: loading ? 'not-allowed' : 'pointer',
                 transition: 'all 0.3s ease',
-                fontFamily: 'Consolas, Monaco, monospace'
+                boxShadow: loading
+                  ? 'none'
+                  : '0 4px 20px rgba(79, 195, 247, 0.4)'
               }}
-              onFocus={(e) => {
-                e.target.style.borderColor = 'rgba(79, 195, 247, 0.8)'
-                e.target.style.boxShadow = '0 0 20px rgba(79, 195, 247, 0.2)'
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = 'rgba(100, 150, 255, 0.3)'
-                e.target.style.boxShadow = 'none'
-              }}
-            />
+            >
+              {loading ? '计算中...' : '查询'}
+            </button>
           </div>
-          <button
-            onClick={handleCheck}
-            disabled={loading}
-            style={{
-              marginTop: '26px',
-              padding: '14px 32px',
-              fontSize: '16px',
-              fontWeight: 600,
-              background: loading
-                ? 'rgba(100, 150, 255, 0.3)'
-                : 'linear-gradient(135deg, #4fc3f7, #ba68c8)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '10px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              transition: 'all 0.3s ease',
-              boxShadow: loading
-                ? 'none'
-                : '0 4px 20px rgba(79, 195, 247, 0.4)'
-            }}
-          >
-            {loading ? '计算中...' : '查询'}
-          </button>
+
+          <ProgressBar progress={progress} visible={loading || progress !== null} />
         </div>
 
         {error && (
@@ -346,7 +364,9 @@ function DigitChecker() {
             { n: '5040', desc: '7! = 5040' },
             { n: '40320', desc: '8! = 40320' },
             { n: '362880', desc: '9! = 362880' },
-            { n: '3628800', desc: '10! = 3628800' }
+            { n: '3628800', desc: '10! = 3628800' },
+            { n: '1000000000', desc: '10亿位 (测试)' },
+            { n: '1000000000000', desc: '1万亿位 (测试)' }
           ].map((item) => (
             <button
               key={item.n}
@@ -374,7 +394,7 @@ function DigitChecker() {
                 fontFamily: 'Consolas, Monaco, monospace'
               }}
             >
-              <span>第 {item.n} 位</span>
+              <span>第 {item.n.length > 7 ? item.n.slice(0, 3) + '...' + item.n.slice(-3) : item.n} 位</span>
               <span style={{ color: 'rgba(224, 224, 255, 0.5)', fontSize: '12px' }}>
                 {item.desc}
               </span>
@@ -403,7 +423,8 @@ function DigitChecker() {
             lineHeight: 1.5
           }}>
             刘维尔数中 1 的位置极为稀疏。前 100 万位中只有 9 个 1（对应 1! 到 9!）。
-            尝试输入一个非常大的数，看看它是不是阶数位！
+            尝试输入一个非常大的数（如 10 亿、1 万亿），看看它是不是阶数位！
+            现在使用斯特林公式快速估算，不会再卡死。
           </p>
         </div>
       </div>

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import type { SpiralDataPoint } from '../types/global'
+import type { SpiralDataPoint, ProgressInfo } from '../types/global'
+import ProgressBar from './ProgressBar'
 
 function SpiralVisualization() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -21,6 +22,17 @@ function SpiralVisualization() {
   const [autoRotate, setAutoRotate] = useState(true)
   const [showZeros, setShowZeros] = useState(true)
   const [spiralHeight, setSpiralHeight] = useState(true)
+  const [progress, setProgress] = useState<ProgressInfo | null>(null)
+
+  useEffect(() => {
+    const unsub = window.liouvilleAPI.onGenerateSpiralProgress((info) => {
+      setProgress(info)
+      if (info.done) {
+        setTimeout(() => setProgress(null), 500)
+      }
+    })
+    return unsub
+  }, [])
 
   const loadData = async () => {
     if (!totalBits.trim() || !/^\d+$/.test(totalBits.trim())) {
@@ -36,6 +48,7 @@ function SpiralVisualization() {
 
     setLoading(true)
     setError('')
+    setProgress({ progress: 0, percentage: 0, message: '初始化...' })
 
     try {
       const result = await window.liouvilleAPI.generateSpiral(totalBits.trim(), pointsPerRotation)
@@ -378,6 +391,10 @@ function SpiralVisualization() {
             >
               {loading ? '生成中...' : '重新生成'}
             </button>
+          </div>
+
+          <div style={{ width: '100%', marginTop: '12px' }}>
+            <ProgressBar progress={progress} visible={loading || progress !== null} />
           </div>
         </div>
 

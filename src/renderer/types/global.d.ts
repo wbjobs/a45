@@ -1,3 +1,11 @@
+export interface ProgressInfo {
+  progress: number
+  percentage: number
+  message: string
+  done?: boolean
+  error?: string
+}
+
 export interface LiouvilleResult {
   position: string
   digit: 0 | 1
@@ -27,6 +35,8 @@ export interface DigitSequencePoint {
   digit: 0 | 1
 }
 
+export type ProgressListener = (info: ProgressInfo) => void
+
 declare global {
   interface Window {
     liouvilleAPI: {
@@ -34,6 +44,10 @@ declare global {
       calculateDensity: (totalBits: string, numRanges: number) => Promise<DensityDataPoint[]>
       generateSpiral: (totalBits: string, pointsPerRotation: number) => Promise<SpiralDataPoint[]>
       generateSequence: (start: string, length: number) => Promise<DigitSequencePoint[]>
+      onCheckDigitProgress: (listener: ProgressListener) => () => void
+      onCalculateDensityProgress: (listener: ProgressListener) => () => void
+      onGenerateSpiralProgress: (listener: ProgressListener) => () => void
+      onGenerateSequenceProgress: (listener: ProgressListener) => () => void
     }
   }
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import type { DigitSequencePoint } from '../types/global'
+import type { DigitSequencePoint, ProgressInfo } from '../types/global'
+import ProgressBar from './ProgressBar'
 
 function SequenceViewer() {
   const [start, setStart] = useState('1')
@@ -7,6 +8,17 @@ function SequenceViewer() {
   const [data, setData] = useState<DigitSequencePoint[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [progress, setProgress] = useState<ProgressInfo | null>(null)
+
+  useEffect(() => {
+    const unsub = window.liouvilleAPI.onGenerateSequenceProgress((info) => {
+      setProgress(info)
+      if (info.done) {
+        setTimeout(() => setProgress(null), 500)
+      }
+    })
+    return unsub
+  }, [])
 
   const loadData = async () => {
     if (!start.trim() || !/^\d+$/.test(start.trim())) {
@@ -27,6 +39,7 @@ function SequenceViewer() {
 
     setLoading(true)
     setError('')
+    setProgress({ progress: 0, percentage: 0, message: '初始化...' })
 
     try {
       const result = await window.liouvilleAPI.generateSequence(start.trim(), length)
@@ -280,6 +293,10 @@ function SequenceViewer() {
           >
             下一页 ▶
           </button>
+        </div>
+
+        <div style={{ width: '100%', marginTop: '12px' }}>
+          <ProgressBar progress={progress} visible={loading || progress !== null} />
         </div>
       </div>
 

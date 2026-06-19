@@ -3,7 +3,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area, Cell, ReferenceLine
 } from 'recharts'
-import type { DensityDataPoint } from '../types/global'
+import type { DensityDataPoint, ProgressInfo } from '../types/global'
+import ProgressBar from './ProgressBar'
 
 function DensityChart() {
   const [totalBits, setTotalBits] = useState('10000')
@@ -11,6 +12,17 @@ function DensityChart() {
   const [data, setData] = useState<DensityDataPoint[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [progress, setProgress] = useState<ProgressInfo | null>(null)
+
+  useEffect(() => {
+    const unsub = window.liouvilleAPI.onCalculateDensityProgress((info) => {
+      setProgress(info)
+      if (info.done) {
+        setTimeout(() => setProgress(null), 500)
+      }
+    })
+    return unsub
+  }, [])
 
   const loadData = async () => {
     if (!totalBits.trim() || !/^\d+$/.test(totalBits.trim())) {
@@ -26,6 +38,7 @@ function DensityChart() {
 
     setLoading(true)
     setError('')
+    setProgress({ progress: 0, percentage: 0, message: '初始化...' })
 
     try {
       const result = await window.liouvilleAPI.calculateDensity(totalBits.trim(), numRanges)
@@ -174,6 +187,10 @@ function DensityChart() {
           >
             {loading ? '分析中...' : '重新分析'}
           </button>
+        </div>
+
+        <div style={{ width: '100%', marginTop: '12px' }}>
+          <ProgressBar progress={progress} visible={loading || progress !== null} />
         </div>
       </div>
 

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, IpcMainInvokeEvent } from 'electron'
 import * as path from 'path'
 import {
   checkLiouvilleDigit,
@@ -7,7 +7,8 @@ import {
   generateDigitSequence,
   LiouvilleResult,
   DensityDataPoint,
-  SpiralDataPoint
+  SpiralDataPoint,
+  ProgressCallback
 } from './liouville'
 
 let mainWindow: BrowserWindow | null = null
@@ -74,14 +75,48 @@ function serializeBigInt(obj: any): any {
   return obj
 }
 
+function createProgressCallback(
+  event: IpcMainInvokeEvent,
+  channel: string
+): ProgressCallback {
+  let lastSentProgress = -1
+  return (progress: number, message: string) => {
+    const roundedProgress = Math.round(progress * 100)
+    if (roundedProgress !== lastSentProgress) {
+      lastSentProgress = roundedProgress
+      try {
+        event.sender.send(channel, {
+          progress: Math.max(0, Math.min(1, progress)),
+          percentage: roundedProgress,
+          message
+        })
+      } catch {}
+    }
+  }
+}
+
 ipcMain.handle(
   'check-digit',
-  (event, positionStr: string): LiouvilleResult => {
+  async (event, positionStr: string): Promise<LiouvilleResult> => {
     try {
       const position = BigInt(positionStr)
-      const result = checkLiouvilleDigit(position)
+      const onProgress = createProgressCallback(event, 'check-digit-progress')
+      const result = await checkLiouvilleDigit(position, onProgress)
+      event.sender.send('check-digit-progress', {
+        progress: 1,
+        percentage: 100,
+        message: '完成！',
+        done: true
+      })
       return serializeBigInt(result) as unknown as LiouvilleResult
     } catch (error: any) {
+      event.sender.send('check-digit-progress', {
+        progress: 1,
+        percentage: 100,
+        message: '出错了',
+        error: error.message,
+        done: true
+      })
       throw new Error(error.message || '计算失败')
     }
   }
@@ -89,12 +124,26 @@ ipcMain.handle(
 
 ipcMain.handle(
   'calculate-density',
-  (event, totalBitsStr: string, numRanges: number): DensityDataPoint[] => {
+  async (event, totalBitsStr: string, numRanges: number): Promise<DensityDataPoint[]> => {
     try {
       const totalBits = BigInt(totalBitsStr)
-      const result = calculateDensity(totalBits, numRanges)
+      const onProgress = createProgressCallback(event, 'calculate-density-progress')
+      const result = await calculateDensity(totalBits, numRanges, onProgress)
+      event.sender.send('calculate-density-progress', {
+        progress: 1,
+        percentage: 100,
+        message: '完成！',
+        done: true
+      })
       return serializeBigInt(result) as unknown as DensityDataPoint[]
     } catch (error: any) {
+      event.sender.send('calculate-density-progress', {
+        progress: 1,
+        percentage: 100,
+        message: '出错了',
+        error: error.message,
+        done: true
+      })
       throw new Error(error.message || '密度计算失败')
     }
   }
@@ -102,12 +151,26 @@ ipcMain.handle(
 
 ipcMain.handle(
   'generate-spiral',
-  (event, totalBitsStr: string, pointsPerRotation: number): SpiralDataPoint[] => {
+  async (event, totalBitsStr: string, pointsPerRotation: number): Promise<SpiralDataPoint[]> => {
     try {
       const totalBits = BigInt(totalBitsStr)
-      const result = generateSpiralData(totalBits, pointsPerRotation)
+      const onProgress = createProgressCallback(event, 'generate-spiral-progress')
+      const result = await generateSpiralData(totalBits, pointsPerRotation, onProgress)
+      event.sender.send('generate-spiral-progress', {
+        progress: 1,
+        percentage: 100,
+        message: '完成！',
+        done: true
+      })
       return serializeBigInt(result) as unknown as SpiralDataPoint[]
     } catch (error: any) {
+      event.sender.send('generate-spiral-progress', {
+        progress: 1,
+        percentage: 100,
+        message: '出错了',
+        error: error.message,
+        done: true
+      })
       throw new Error(error.message || '螺旋数据生成失败')
     }
   }
@@ -115,12 +178,26 @@ ipcMain.handle(
 
 ipcMain.handle(
   'generate-sequence',
-  (event, startStr: string, length: number): Array<{ position: string; digit: 0 | 1 }> => {
+  async (event, startStr: string, length: number): Promise<Array<{ position: string; digit: 0 | 1 }>> => {
     try {
       const start = BigInt(startStr)
-      const result = generateDigitSequence(start, length)
+      const onProgress = createProgressCallback(event, 'generate-sequence-progress')
+      const result = await generateDigitSequence(start, length, onProgress)
+      event.sender.send('generate-sequence-progress', {
+        progress: 1,
+        percentage: 100,
+        message: '完成！',
+        done: true
+      })
       return serializeBigInt(result) as unknown as Array<{ position: string; digit: 0 | 1 }>
     } catch (error: any) {
+      event.sender.send('generate-sequence-progress', {
+        progress: 1,
+        percentage: 100,
+        message: '出错了',
+        error: error.message,
+        done: true
+      })
       throw new Error(error.message || '序列生成失败')
     }
   }
